@@ -26,21 +26,6 @@ GOAL_SCHEME = {
     models.GoalEnum.general_fitness: {"sets": 3, "reps": 10},
 }
 
-# What equipment a user actually has access to, given their selection.
-# A full gym contains dumbbells, barbells and bands too — not just machines —
-# so "full_gym" should unlock everything, not just exercises tagged full_gym.
-EQUIPMENT_ACCESS = {
-    models.EquipmentEnum.none: {models.EquipmentEnum.none},
-    models.EquipmentEnum.dumbbells: {models.EquipmentEnum.none, models.EquipmentEnum.dumbbells},
-    models.EquipmentEnum.barbell: {models.EquipmentEnum.none, models.EquipmentEnum.barbell},
-    models.EquipmentEnum.resistance_bands: {models.EquipmentEnum.none, models.EquipmentEnum.resistance_bands},
-    models.EquipmentEnum.full_gym: {
-        models.EquipmentEnum.none, models.EquipmentEnum.dumbbells,
-        models.EquipmentEnum.barbell, models.EquipmentEnum.resistance_bands,
-        models.EquipmentEnum.full_gym,
-    },
-}
-
 VALID_MUSCLE_GROUPS = [
     "legs", "chest", "back", "shoulders", "glutes", "hamstrings", "arms", "core",
 ]
@@ -50,19 +35,17 @@ def eligible_exercises(db: Session, profile: models.Profile, target_muscle_group
     """
     Safety-first filter: an exercise is eligible only if
       - it belongs to the requested target muscle group, AND
-      - the user has access to its required equipment (full_gym unlocks
-        everything; other equipment types unlock themselves + bodyweight), AND
+      - its required equipment matches the user's equipment (or needs none), AND
       - its difficulty is at or below the user's experience level.
     """
     all_exercises = db.query(models.Exercise).filter(
         models.Exercise.muscle_group == target_muscle_group
     ).all()
     user_level = EXPERIENCE_ORDER[profile.experience_level]
-    accessible_equipment = EQUIPMENT_ACCESS[profile.equipment]
 
     return [
         ex for ex in all_exercises
-        if ex.equipment_required in accessible_equipment
+        if (ex.equipment_required == profile.equipment or ex.equipment_required == models.EquipmentEnum.none)
         and EXPERIENCE_ORDER[ex.difficulty_level] <= user_level
     ]
 
