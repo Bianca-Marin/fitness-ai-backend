@@ -1,89 +1,90 @@
-# Fitness AI Backend — Milestone 1
+# Fitness AI Backend
 
-Data model + FastAPI scaffold for the explainable AI-powered strength training
-recommendation system (QHO656). This covers **Milestone 1 only**:
-PostgreSQL schema + basic CRUD endpoints. No recommendation logic yet —
-that's Milestone 2.
+Backend for my dissertation project — an explainable AI-powered strength
+training recommendation system (Southampton Solent University, QHO656).
+This covers Milestones 1–3: the data layer, the rule-based recommendation
+engine, and LLM-generated explanations. The frontend (Milestone 4) is a
+separate repo, linked in the Appendix of my dissertation report.
+
+## What this does
+
+You set up a profile (goal, experience level, equipment you have access to),
+then pick a muscle group to train (e.g. "glutes"). The system:
+
+1. **Filters** the exercise catalogue using hard safety rules — your
+   equipment has to actually be available to you (having "full gym" access
+   unlocks dumbbells, barbell and resistance bands too, not just
+   gym-machine exercises), and the difficulty has to be at or below your
+   experience level.
+2. **Selects** a shortlist for that muscle group, preferring exercises that
+   match your specific equipment over generic bodyweight substitutes.
+3. **Explains** each pick using an LLM (OpenAI API), which rewrites a
+   rule-based template into more natural language. If the LLM call fails
+   for any reason, it falls back to the rule-based explanation instead of
+   returning nothing.
 
 ## What's here
 
-```
-fitness-ai-backend/
-├── app/
-│   ├── main.py          # FastAPI app + router registration
-│   ├── database.py       # SQLAlchemy engine/session setup
-│   ├── models.py         # THE SCHEMA: User, Profile, Exercise, Programme, ProgrammeExercise
-│   ├── schemas.py         # Pydantic request/response models
-│   └── routers/
-│       ├── users.py       # POST/GET users (registration)
-│       ├── profiles.py    # POST/GET profile (goal, experience, equipment)
-│       ├── exercises.py   # POST/GET exercise catalogue
-│       └── programmes.py  # POST/GET programme shells
-├── seed_data.py            # populates 12 starter exercises
-├── requirements.txt
-├── .env.example
-└── README.md
-```
+## Setup
 
-## Setup (run this locally — not tested in this sandbox, no internet there)
+You'll need Python 3.11+, PostgreSQL, and an OpenAI API key (for the
+Milestone 3 explanations — the system still runs and returns rule-based
+explanations without one, via the fallback described above).
 
-1. **Install PostgreSQL** if you don't have it (e.g. via Postgres.app on Mac,
-   or the official installer on Windows), and create a database:
-   ```sql
+1. **Install PostgreSQL** if you don't have it (I used Postgres.app on
+   Mac), and create a database:
+```sql
    CREATE DATABASE fitness_ai;
-   ```
+```
 
 2. **Create a virtual environment and install dependencies:**
-   ```bash
+```bash
    cd fitness-ai-backend
    python3 -m venv venv
    source venv/bin/activate      # on Windows: venv\Scripts\activate
    pip install -r requirements.txt
-   ```
+```
 
 3. **Set up your environment file:**
-   ```bash
+```bash
    cp .env.example .env
-   # then edit .env with your actual Postgres username/password
-   ```
+```
+   Then edit `.env` with your own values:
 
-4. **Seed the exercise catalogue:**
-   ```bash
+4. **Seed the exercise catalogue** (run all three, in order — each is safe
+   to re-run and only adds exercises that don't already exist):
+```bash
    python seed_data.py
-   ```
+   python seed_more.py
+   python seed_glutes_v2.py
+```
 
-5. **Run the API:**
-   ```bash
-   uvicorn app.main:app --reload
-   ```
+5. **Run the server:**
+```bash
+   uvicorn app.main:app --reload --reload-dir app
+```
 
-6. **Open the interactive docs:** http://127.0.0.1:8000/docs
-   This gives you a clickable UI to test every endpoint — genuinely useful
-   to screenshot/demo in your supervisor meeting or dissertation appendix,
-   even before the frontend exists.
+## Testing / verifying it works
 
-## Quick test flow (via the /docs UI, in order)
+With the server running, open **http://127.0.0.1:8000/docs** — this is
+FastAPI's interactive Swagger UI, which I used throughout development to
+manually test each endpoint (see Section 5.1.3 of my dissertation report
+for a documented example).
+
+A minimal end-to-end test:
 
 1. `POST /users/` — create a user (email + password)
-2. `POST /users/{user_id}/profile/` — set their goal/experience/equipment
-3. `GET /exercises/` — confirm the seeded exercises are there
-4. `POST /users/{user_id}/programmes/` — create an empty programme shell
-5. `GET /users/{user_id}/programmes/` — confirm it's linked to the user
+2. `POST /users/{user_id}/profile/` — attach a profile (goal, experience_level, equipment)
+3. `GET /exercises/` — confirm the catalogue is seeded (optionally filter by muscle_group/equipment_required/difficulty_level)
+4. `POST /users/{user_id}/programmes/` — generate a session, supplying `target_muscle_group` (e.g. `"glutes"`, `"back"`, `"chest"`, `"shoulders"`, `"legs"`, `"hamstrings"`, `"arms"`, `"core"`)
 
-Steps 1-5 prove the whole data layer works end to end — user → profile →
-programme → (empty) exercises. Milestone 2 fills in step 4's exercises
-automatically instead of leaving the programme empty.
+The response should include a list of exercises with `sets`, `reps`, and a
+populated `explanation` field for each. If `OPENAI_API_KEY` is missing or
+invalid, the explanation will still be present, just in the simpler
+rule-based wording — that's the tested fallback, not a bug.
 
-## Design notes (for your dissertation write-up)
+## Known limitation
 
-- **Why SQLAlchemy over raw SQL:** gives you migrations-ready models and
-  keeps the schema in Python, which matters when the recommendation logic
-  in Milestone 2 needs to query "exercises where equipment matches AND
-  difficulty <= user's experience".
-- **Why `explanation` lives on `programme_exercises`, not `exercises`:** the
-  explanation is specific to *why this exercise was picked for this user in
-  this programme* — it's not a property of the exercise itself. This is the
-  field your evaluation study (Section 2.4) will actually be testing.
-- **Why enums (Goal/Experience/Equipment) instead of free-text:** keeps the
-  rule-based filter in Milestone 2 simple (exact matching) rather than
-  needing fuzzy text matching.
+The exercise catalogue (~40 exercises) is intentionally modest in size for
+a dissertation-scope project — see Chapter 8 (Recommendations for Further
+Work) in the dissertation report.
